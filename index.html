@@ -95,7 +95,8 @@ input.err{border-color:var(--err)!important}
 .price{font-family:'Playfair Display',serif;font-size:2.4rem;font-weight:600}
 .plbl{font-size:.78rem;color:var(--muted);margin:.2rem 0 1.4rem}
 .btnpay{display:block;width:100%;background:var(--accent);color:#fff;border:none;border-radius:10px;padding:1.05rem;font-family:'DM Sans',sans-serif;font-size:.98rem;font-weight:500;cursor:pointer;text-decoration:none;box-shadow:0 0 28px var(--glow);transition:transform .15s,background .2s;margin-bottom:.7rem;text-align:center}
-.btnpay:hover{background:var(--accent2);transform:translateY(-1px)}
+.btnpay:hover:not(:disabled){background:var(--accent2);transform:translateY(-1px)}
+.btnpay:disabled{opacity:.7;cursor:wait}
 .guar{font-size:.76rem;color:var(--muted)}
 #testi{padding:6rem 0}
 .tg{display:grid;grid-template-columns:1fr;gap:1.1rem;margin-top:2.4rem}
@@ -204,6 +205,11 @@ footer a:hover{color:var(--accent2)}
           <span class="hint">La ville suffit — pas besoin d'adresse exacte</span>
           <div id="cs"></div>
         </div>
+        <div class="fg-item full">
+          <label for="email">Email *</label>
+          <input type="email" id="email" placeholder="ton@email.com" autocomplete="email">
+          <span class="ferr" id="err-email">Ce champ est requis.</span>
+        </div>
       </div>
       <button class="btn" id="sbtn">Analyser mon thème natal →</button>
       <div class="fchk">
@@ -237,7 +243,7 @@ footer a:hover{color:var(--accent2)}
           </ul>
           <div class="price">12€</div>
           <div class="plbl">Prix de lancement · paiement unique · rapport livré par email en 5 min</div>
-          <a href="https://buy.stripe.com/eVqaEY9NCdlJgU4a5ibwk06" class="btnpay">Obtenir mon rapport — 12€ →</a>
+          <button class="btnpay" id="payBtn">Obtenir mon rapport — 12€ →</button>
           <p class="guar">✓ Satisfait ou remboursé sous 7 jours, sans condition</p>
         </div>
       </div>
@@ -293,8 +299,12 @@ footer a:hover{color:var(--accent2)}
 var acT;
 var vi=document.getElementById('ville');
 var cs=document.getElementById('cs');
+var selectedLat=null;
+var selectedLon=null;
+var selectedVille=null;
 vi.addEventListener('input',function(){
   clearTimeout(acT);
+  selectedLat=null;selectedLon=null;selectedVille=null;
   var q=this.value.trim();
   if(q.length<2){cs.style.display='none';return;}
   acT=setTimeout(function(){
@@ -306,7 +316,14 @@ vi.addEventListener('input',function(){
         data.forEach(function(place){
           var label=place.display_name.split(',').slice(0,3).map(function(p){return p.trim();}).join(', ');
           var item=document.createElement('div');item.className='si';item.textContent=label;
-          item.addEventListener('mousedown',function(e){e.preventDefault();vi.value=label;cs.style.display='none';});
+          item.addEventListener('mousedown',function(e){
+            e.preventDefault();
+            vi.value=label;
+            selectedLat=parseFloat(place.lat);
+            selectedLon=parseFloat(place.lon);
+            selectedVille=label;
+            cs.style.display='none';
+          });
           cs.appendChild(item);
         });
         cs.style.display='block';
@@ -358,6 +375,43 @@ document.querySelectorAll('.fq').forEach(function(btn){
     });
     if(!open){item.classList.add('open');ans.style.maxHeight=ans.scrollHeight+'px';}
   });
+});
+
+document.getElementById('payBtn').addEventListener('click',async function(){
+  var btn=this;
+  btn.disabled=true;
+  btn.textContent='Redirection vers le paiement...';
+  var lat=selectedLat!==null?selectedLat:48.8566;
+  var lon=selectedLon!==null?selectedLon:2.3522;
+  var ville=selectedVille||'';
+  var heure=document.getElementById('heure').value;
+  var birth_date=heure?document.getElementById('dob').value+'T'+heure+':00':document.getElementById('dob').value+'T00:00:00';
+  try{
+    var response=await fetch('https://web-production-37fb.up.railway.app/api/create-checkout-session',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        product_slug:'red-flags-astrologiques',
+        prenom:document.getElementById('prenom').value.trim(),
+        email:document.getElementById('email').value.trim(),
+        birth_date:birth_date,
+        latitude:lat,
+        longitude:lon,
+        ville:ville
+      })
+    });
+    var data=await response.json();
+    if(data.checkout_url){
+      window.location.href=data.checkout_url;
+    }else{
+      throw new Error(data.error||'Erreur inconnue');
+    }
+  }catch(err){
+    console.error('Checkout error:',err);
+    btn.disabled=false;
+    btn.textContent='Obtenir mon rapport — 12€ →';
+    alert('Une erreur est survenue. Merci de réessayer.');
+  }
 });
 </script>
 </body>
